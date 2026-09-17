@@ -2,6 +2,8 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
+import SubscriptionBillingModal from "../billing/SubscriptionBillingModal";
+import WorkspaceSettingsModal from "../workspace/WorkspaceSettingsModal";
 import {
   LogOut,
   User,
@@ -19,8 +21,10 @@ interface UserMenuDropdownProps {
 }
 
 export default function UserMenuDropdown({ placement = "left-rail" }: UserMenuDropdownProps) {
-  const { user, logout } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
+  const [isBillingOpen, setIsBillingOpen] = useState(false);
+  const [isWorkspaceOpen, setIsWorkspaceOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -104,8 +108,11 @@ export default function UserMenuDropdown({ placement = "left-rail" }: UserMenuDr
             </button>
 
             <button
-              onClick={() => setIsOpen(false)}
-              className="w-full flex items-center justify-between px-3 py-2 rounded-xl hover:bg-[#162035] hover:text-white transition-colors"
+              onClick={() => {
+                setIsOpen(false);
+                setIsBillingOpen(true);
+              }}
+              className="w-full flex items-center justify-between px-3 py-2 rounded-xl hover:bg-[#162035] hover:text-white transition-colors cursor-pointer"
             >
               <span className="flex items-center gap-2.5">
                 <CreditCard size={15} className="text-slate-400" /> Subscription & Billing
@@ -114,8 +121,13 @@ export default function UserMenuDropdown({ placement = "left-rail" }: UserMenuDr
             </button>
 
             <button
-              onClick={() => setIsOpen(false)}
-              className="w-full flex items-center justify-between px-3 py-2 rounded-xl hover:bg-[#162035] hover:text-white transition-colors"
+              onClick={() => {
+                setIsOpen(false);
+                if (typeof window !== "undefined") {
+                  window.location.href = "/#developer";
+                }
+              }}
+              className="w-full flex items-center justify-between px-3 py-2 rounded-xl hover:bg-[#162035] hover:text-white transition-colors cursor-pointer"
             >
               <span className="flex items-center gap-2.5">
                 <Key size={15} className="text-slate-400" /> API Keys & Webhooks
@@ -124,11 +136,14 @@ export default function UserMenuDropdown({ placement = "left-rail" }: UserMenuDr
             </button>
 
             <button
-              onClick={() => setIsOpen(false)}
-              className="w-full flex items-center justify-between px-3 py-2 rounded-xl hover:bg-[#162035] hover:text-white transition-colors"
+              onClick={() => {
+                setIsOpen(false);
+                setIsWorkspaceOpen(true);
+              }}
+              className="w-full flex items-center justify-between px-3 py-2 rounded-xl hover:bg-[#162035] hover:text-white transition-colors cursor-pointer"
             >
               <span className="flex items-center gap-2.5">
-                <Settings size={15} className="text-slate-400" /> Workspace Settings
+                <Settings size={15} className="text-slate-400" /> Workspace Settings & Team
               </span>
               <ChevronRight size={13} className="text-slate-500" />
             </button>
@@ -148,6 +163,25 @@ export default function UserMenuDropdown({ placement = "left-rail" }: UserMenuDr
             <span>Sign Out / Log Out</span>
           </button>
         </div>
+      )}
+
+      {/* Subscription Billing Modal */}
+      {isBillingOpen && (
+        <SubscriptionBillingModal
+          onClose={() => setIsBillingOpen(false)}
+          onSuccess={() => {
+            refreshUser();
+          }}
+        />
+      )}
+
+      {/* Workspace Settings Modal */}
+      {isWorkspaceOpen && (
+        <WorkspaceSettingsModal
+          isOpen={isWorkspaceOpen}
+          onClose={() => setIsWorkspaceOpen(false)}
+          workspaceId={user.workspaceId || "11dc536d-194d-48ce-9896-dcafc2c3c1a1"}
+        />
       )}
     </div>
   );

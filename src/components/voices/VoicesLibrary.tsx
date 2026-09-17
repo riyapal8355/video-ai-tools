@@ -450,6 +450,38 @@ export default function VoicesLibrary({ onSelectVoice }: { onSelectVoice?: (voic
   const [languageSearch, setLanguageSearch] = useState("");
   const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
   const [visibleCount, setVisibleCount] = useState(14);
+  const [voiceCatalog, setVoiceCatalog] = useState<VoiceItem[]>(mockVoices);
+
+  const fetchVoices = async () => {
+    try {
+      const res = await fetch("/api/v2/voices");
+      if (res.ok) {
+        const data = await res.json();
+        const dbItems: any[] = data.voices || [];
+        const customVoices: VoiceItem[] = dbItems
+          .filter((v) => v.type === "instant_clone" || v.providerName === "custom_cloned")
+          .map((v) => ({
+            id: v.id,
+            name: v.name,
+            description: v.description || "Custom Cloned Voice",
+            useCases: ["Conversational", "Ads and Social"],
+            age: "Young adult",
+            gender: (v.gender as any) || "Female",
+            language: v.languageDefault || "English (United States)",
+            flag: "🎙️",
+            country: "Custom",
+            type: "Custom",
+          }));
+        setVoiceCatalog([...customVoices, ...mockVoices]);
+      }
+    } catch (e) {
+      console.error("Failed to load voices:", e);
+    }
+  };
+
+  useEffect(() => {
+    fetchVoices();
+  }, []);
 
   // Filters Dropdown State
   const [isFilterDropdownOpen, setIsFilterDropdownOpen] = useState(false);
@@ -506,7 +538,9 @@ export default function VoicesLibrary({ onSelectVoice }: { onSelectVoice?: (voic
   const activeFilterCount = selectedUseCases.length + selectedAges.length;
 
   // Filtered Voices Logic
-  const filteredVoices = mockVoices.filter((voice) => {
+  const filteredVoices = voiceCatalog.filter((voice) => {
+    const matchesTab = activeTab === "my_voices" ? voice.type === "Custom" : true;
+
     const matchesSearch =
       voice.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       voice.description.toLowerCase().includes(searchQuery.toLowerCase());
@@ -526,7 +560,7 @@ export default function VoicesLibrary({ onSelectVoice }: { onSelectVoice?: (voic
     const matchesAge =
       selectedAges.length === 0 || selectedAges.includes(voice.age);
 
-    return matchesSearch && matchesGender && matchesLang && matchesUseCase && matchesAge;
+    return matchesTab && matchesSearch && matchesGender && matchesLang && matchesUseCase && matchesAge;
   });
 
   const filteredLanguages = languagesList.filter((l) =>
@@ -959,8 +993,9 @@ export default function VoicesLibrary({ onSelectVoice }: { onSelectVoice?: (voic
       <CreateVoiceCloneModal
         isOpen={isCloneModalOpen}
         onClose={() => setIsCloneModalOpen(false)}
-        onSuccess={(name) => {
-          // Add newly created custom voice to state
+        onSuccess={() => {
+          fetchVoices();
+          setActiveTab("my_voices");
         }}
       />
 

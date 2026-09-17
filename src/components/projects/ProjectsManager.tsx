@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Video,
   Search,
@@ -35,7 +35,7 @@ interface ProjectItem {
 
 interface ProjectsManagerProps {
   activeSection?: "my_projects" | "trash";
-  onOpenStudio?: () => void;
+  onOpenStudio?: (projectId?: string) => void;
 }
 
 export default function ProjectsManager({
@@ -52,25 +52,30 @@ export default function ProjectsManager({
   // Selection state
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   // Open menu id
-  const [openMenuId, setOpenMenuId] = useState<string | null>("proj_1"); // opens menu matching screenshot
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   // Inline rename state
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [newTitle, setNewTitle] = useState("");
 
-  const [projects, setProjects] = useState<ProjectItem[]>([
-    {
-      id: "proj_1",
-      title: "Untitled Video",
-      type: "avatar_video",
-      badgeLabel: "Avatar Video",
-      status: "Draft",
-      createdAt: "4 minutes ago",
-      source: "AI Studio",
-      creator: "Riya",
-    },
-  ]);
-
+  const [projects, setProjects] = useState<ProjectItem[]>([]);
   const [trashProjects, setTrashProjects] = useState<ProjectItem[]>([]);
+
+  useEffect(() => {
+    async function loadProjects() {
+      try {
+        const res = await fetch("/api/v2/projects");
+        if (res.ok) {
+          const data = await res.json();
+          if (data.projects && data.projects.length > 0) {
+            setProjects(data.projects);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load projects:", err);
+      }
+    }
+    loadProjects();
+  }, []);
 
   const filteredProjects = projects.filter((p) => {
     const matchesTab =
@@ -98,7 +103,22 @@ export default function ProjectsManager({
     setOpenMenuId(null);
   };
 
-  const handleEditAsNew = (p: ProjectItem) => {
+  const handleEditAsNew = async (p: ProjectItem) => {
+    try {
+      const res = await fetch("/api/v2/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: `${p.title} (Copy)` }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setOpenMenuId(null);
+        if (onOpenStudio) onOpenStudio(data.project.id);
+        return;
+      }
+    } catch {
+      // fallback
+    }
     const duplicated: ProjectItem = {
       ...p,
       id: `proj_${Date.now()}`,
@@ -107,7 +127,7 @@ export default function ProjectsManager({
     };
     setProjects([duplicated, ...projects]);
     setOpenMenuId(null);
-    if (onOpenStudio) onOpenStudio();
+    if (onOpenStudio) onOpenStudio(duplicated.id);
   };
 
   const handleStartRename = (p: ProjectItem) => {
@@ -116,21 +136,35 @@ export default function ProjectsManager({
     setOpenMenuId(null);
   };
 
-  const handleSaveRename = (id: string) => {
+  const handleSaveRename = async (id: string) => {
     if (newTitle.trim()) {
       setProjects(
         projects.map((p) => (p.id === id ? { ...p, title: newTitle.trim() } : p))
       );
+      try {
+        await fetch(`/api/v2/projects/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: newTitle.trim() }),
+        });
+      } catch (err) {
+        console.error("Rename project error:", err);
+      }
     }
     setRenamingId(null);
   };
 
-  const handleDeleteProject = (id: string, e?: React.MouseEvent) => {
+  const handleDeleteProject = async (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     const item = projects.find((p) => p.id === id);
     if (item) {
       setProjects(projects.filter((p) => p.id !== id));
       setTrashProjects([...trashProjects, item]);
+      try {
+        await fetch(`/api/v2/projects/${id}`, { method: "DELETE" });
+      } catch (err) {
+        console.error("Delete project error:", err);
+      }
     }
     setOpenMenuId(null);
   };
@@ -299,7 +333,7 @@ export default function ProjectsManager({
                     {/* Aspect 16:10 Thumbnail Card Frame (Exact Screenshot Match) */}
                     <div
                       onClick={() => {
-                        if (onOpenStudio) onOpenStudio();
+                        if (onOpenStudio) onOpenStudio(project.id);
                       }}
                       className="aspect-[16/10] bg-[#1a2130] hover:bg-[#20293d] border border-[#222d42] hover:border-cyan-500/60 rounded-3xl overflow-hidden relative shadow-sm hover:shadow-xl hover:shadow-cyan-500/10 transition-all duration-300 cursor-pointer flex items-center justify-center p-4"
                     >
@@ -332,7 +366,7 @@ export default function ProjectsManager({
                       <div
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (onOpenStudio) onOpenStudio();
+                          if (onOpenStudio) onOpenStudio(project.id);
                         }}
                         className="w-12 h-12 rounded-full bg-black/60 hover:bg-black/80 border border-white/20 flex items-center justify-center text-white shadow-lg transition-transform duration-200 hover:scale-110 cursor-pointer"
                         title="Edit project in Studio"

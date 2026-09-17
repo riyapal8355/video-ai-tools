@@ -37,9 +37,9 @@ export default function AuthPage() {
     }
 
     if (mode === "login") {
-      login(email);
+      login(email, password);
     } else if (mode === "signup") {
-      signup(email, name || "Creator");
+      signup(email, password, name || "Creator");
     } else {
       alert("Password reset instructions sent to " + email);
       setMode("login");
@@ -47,7 +47,7 @@ export default function AuthPage() {
   };
 
   const handleDemoLogin = (demoName: string, demoEmail: string) => {
-    login(demoEmail, demoName);
+    login(demoEmail, "Password123!", demoName);
   };
 
   return (

@@ -1,0 +1,560 @@
+// VidoAI Database Schema (Based on 14-DATABASE-SCHEMA.md)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ===================== IDENTITY & TENANCY =====================
+
+model User {
+  id                String            @id @default(uuid())
+  email             String            @unique
+  passwordHash      String?
+  fullName          String?
+  avatarUrl         String?
+  role              String            @default("creator") // "super_admin", "developer", "creator", "viewer"
+  emailVerifiedAt   DateTime?
+  twoFactorEnabled  Boolean           @default(false)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  createdWorkspaces Workspace[]       @relation("WorkspaceCreator")
+  workspaceMembers  WorkspaceMember[]
+  projects          Project[]         @relation("ProjectOwner")
+  renders           Render[]          @relation("RenderUser")
+  assets            Asset[]           @relation("AssetUploader")
+  apiKeys           ApiKey[]
+  avatars           Avatar[]          @relation("AvatarCreator")
+  translationJobs   TranslationJob[]  @relation("TranslationUser")
+  batchJobs         BatchJob[]        @relation("BatchUser")
+  auditLogs         AuditLog[]
+  notifications     Notification[]
+  comments          ProjectComment[]
+
+  @@map("users")
+}
+
+model Workspace {
+  id                    String            @id @default(uuid())
+  name                  String
+  logoUrl               String?
+  createdByUserId       String
+  createdByUser         User              @relation("WorkspaceCreator", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  requireApprovalToJoin Boolean           @default(false)
+  defaultInviteRole     String            @default("creator")
+  planTier              String            @default("starter") // 'free' | 'starter' | 'pro' | 'enterprise'
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  members               WorkspaceMember[]
+  projects              Project[]
+  projectFolders        ProjectFolder[]
+  brandKit              BrandKit?
+  brandGlossary         BrandGlossary[]
+  creditLedger          CreditLedger[]
+  subscription          Subscription?
+  apiKeys               ApiKey[]
+  webhookEndpoints      WebhookEndpoint[]
+  avatars               Avatar[]
+  voices                Voice[]
+  consentRecords        ConsentRecord[]
+  translationJobs       TranslationJob[]
+  batchJobs             BatchJob[]
+  enforceMfa            Boolean           @default(false)
+  allowedDomains        String?
+  ssoEnabled            Boolean           @default(false)
+  ssoProvider           String?
+  auditLogs             AuditLog[]
+  notifications         Notification[]
+
+  @@map("workspaces")
+}
+
+model WorkspaceMember {
+  id          String    @id @default(uuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role        String    @default("creator") // 'super_admin' | 'developer' | 'creator' | 'viewer'
+  status      String    @default("active")  // 'invited' | 'active' | 'removed'
+  invitedAt   DateTime  @default(now())
+  activatedAt DateTime?
+
+  @@unique([workspaceId, userId])
+  @@map("workspace_members")
+}
+
+// ===================== PROJECTS & SCENES =====================
+
+model ProjectFolder {
+  id             String          @id @default(uuid())
+  workspaceId    String
+  workspace      Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name           String
+  parentFolderId String?
+  parentFolder   ProjectFolder?  @relation("FolderHierarchy", fields: [parentFolderId], references: [id], onDelete: Cascade)
+  subFolders     ProjectFolder[] @relation("FolderHierarchy")
+  projects       Project[]
+
+  @@map("project_folders")
+}
+
+model Project {
+  id               String         @id @default(uuid())
+  workspaceId      String
+  workspace        Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  ownerUserId      String
+  ownerUser        User           @relation("ProjectOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  folderId         String?
+  folder           ProjectFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  name             String         @default("Untitled Video")
+  orientation      String         @default("landscape") // 'landscape' (16:9) | 'portrait' (9:16)
+  status           String         @default("draft")     // 'draft' | 'rendering' | 'completed' | 'failed'
+  musicAssetId     String?
+  musicVolume      Float            @default(1.0)
+  sourceTemplateId String?
+  shareToken       String?          @unique
+  isPublic         Boolean          @default(false)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  scenes           Scene[]
+  renders          Render[]
+  comments         ProjectComment[]
+
+  @@map("projects")
+}
+
+model Scene {
+  id                   String        @id @default(uuid())
+  projectId            String
+  project              Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  orderIndex           Int           @default(0)
+  scriptText           String        @default("")
+  avatarId             String?
+  avatarEngine         String        @default("III") // 'III' | 'IV' | 'V'
+  avatarPose           String?       // JSON: { x, y, scale }
+  voiceId              String?
+  voiceSpeed           Float         @default(1.0)
+  voicePitch           Float         @default(0.0)
+  voiceStyleTag        String?
+  backgroundType       String        @default("color") // 'color' | 'image' | 'video'
+  backgroundValue      String        @default("#0f172a")
+  captionsEnabled      Boolean       @default(true)
+  captionsStyle        String?       // JSON: { font, color, position, bg }
+  durationSeconds      Float         @default(5.0)
+  transitionToNext     String        @default("cut")   // 'cut' | 'fade' | 'slide'
+  renderedClipAssetId  String?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  textOverlays         TextOverlay[]
+
+  @@map("scenes")
+}
+
+model TextOverlay {
+  id        String   @id @default(uuid())
+  sceneId   String
+  scene     Scene    @relation(fields: [sceneId], references: [id], onDelete: Cascade)
+  text      String
+  font      String   @default("Inter")
+  size      Int      @default(32)
+  color     String   @default("#ffffff")
+  positionX Float    @default(50.0)
+  positionY Float    @default(50.0)
+  animation String   @default("fade")
+  createdAt DateTime @default(now())
+
+  @@map("text_overlays")
+}
+
+// ===================== ASSETS & STORAGE =====================
+
+model Asset {
+  id                 String    @id @default(uuid())
+  workspaceId        String
+  uploadedByUserId   String
+  uploadedByUser     User      @relation("AssetUploader", fields: [uploadedByUserId], references: [id], onDelete: Cascade)
+  type               String    // 'image' | 'video' | 'audio' | 'font'
+  storageKey         String
+  url                String
+  fileName           String?
+  fileSizeBytes      Int?
+  mimeType           String?
+  durationMs         Int?
+  width              Int?
+  height             Int?
+  createdAt          DateTime  @default(now())
+
+  @@map("assets")
+}
+
+// ===================== RENDERS & JOBS =====================
+
+model Render {
+  id                    String    @id @default(uuid())
+  projectId             String
+  project               Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  requestedByUserId     String
+  requestedByUser       User      @relation("RenderUser", fields: [requestedByUserId], references: [id], onDelete: Cascade)
+  status                String    @default("queued") // 'queued' | 'processing' | 'completed' | 'failed'
+  progressPercentage    Int       @default(0)
+  estimatedCredits      Int       @default(10)
+  actualCreditsConsumed Int?
+  outputAssetUrl        String?
+  errorMessage          String?
+  queuedAt              DateTime  @default(now())
+  startedAt             DateTime?
+  completedAt           DateTime?
+
+  @@map("renders")
+}
+
+// ===================== AVATARS & VOICES =====================
+
+model Avatar {
+  id                 String         @id @default(uuid())
+  ownerWorkspaceId   String?
+  ownerWorkspace     Workspace?     @relation(fields: [ownerWorkspaceId], references: [id], onDelete: Cascade)
+  createdByUserId    String?
+  createdByUser      User?          @relation("AvatarCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  type               String         @default("public") // 'public' | 'photo' | 'instant' | 'generated'
+  name               String
+  status             String         @default("ready")  // 'processing' | 'ready' | 'failed'
+  thumbnailUrl       String?
+  previewVideoUrl    String?
+  supportedEngines   String         @default("III,IV,V")
+  visibility         String         @default("private") // 'private' | 'workspace' | 'public'
+  gender             String         @default("Female")
+  category           String         @default("General")
+  attire             String?
+  sourceAssetId      String?
+  consentRecordId    String?
+  consentRecord      ConsentRecord? @relation(fields: [consentRecordId], references: [id], onDelete: SetNull)
+  createdAt          DateTime       @default(now())
+
+  avatarLooks        AvatarLook[]
+
+  @@map("avatars")
+}
+
+model AvatarLook {
+  id              String  @id @default(uuid())
+  avatarId        String
+  avatar          Avatar  @relation(fields: [avatarId], references: [id], onDelete: Cascade)
+  lookName        String
+  thumbnailUrl    String?
+  previewVideoUrl String?
+
+  @@map("avatar_looks")
+}
+
+model Voice {
+  id                 String         @id @default(uuid())
+  ownerWorkspaceId   String?
+  ownerWorkspace     Workspace?     @relation(fields: [ownerWorkspaceId], references: [id], onDelete: Cascade)
+  type               String         @default("stock") // 'stock' | 'instant_clone' | 'generated'
+  name               String
+  description        String?
+  gender             String         @default("Female")
+  ageGroup           String         @default("Young adult")
+  languageDefault    String         @default("English (United States)")
+  languageCode       String         @default("en-US")
+  supportedLanguages String         @default("en-US")
+  sampleAudioUrl     String?
+  providerVoiceId    String?        // ID in ElevenLabs / OpenAI TTS
+  providerName       String         @default("elevenlabs") // 'elevenlabs' | 'openai' | 'web_speech'
+  status             String         @default("ready")      // 'processing' | 'ready' | 'failed'
+  visibility         String         @default("public")     // 'private' | 'workspace' | 'public'
+  consentRecordId    String?
+  consentRecord      ConsentRecord? @relation(fields: [consentRecordId], references: [id], onDelete: SetNull)
+  createdAt          DateTime       @default(now())
+
+  @@map("voices")
+}
+
+// ===================== CONSENT =====================
+
+model ConsentRecord {
+  id               String     @id @default(uuid())
+  workspaceId      String
+  workspace        Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  subjectName      String
+  recordingUrl     String?
+  typedStatement   String?
+  ipAddress        String?
+  userAgent        String?
+  createdAt        DateTime   @default(now())
+
+  avatars          Avatar[]
+  voices           Voice[]
+
+  @@map("consent_records")
+}
+
+// ===================== BRAND & GLOSSARY =====================
+
+model BrandKit {
+  id               String    @id @default(uuid())
+  workspaceId      String    @unique
+  workspace        Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name             String    @default("Default Brand Kit")
+  logoUrl          String?
+  primaryColor     String    @default("#000000")
+  accentColor      String    @default("#00d2ff")
+  secondaryColor   String    @default("#7928ca")
+  fontFamily       String    @default("Inter")
+  watermarkEnabled Boolean   @default(true)
+  introAssetUrl    String?
+  outroAssetUrl    String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@map("brand_kits")
+}
+
+model BrandGlossary {
+  id           String    @id @default(uuid())
+  workspaceId  String
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  type         String    // 'pronunciation' | 'force_translate' | 'dont_translate'
+  originalTerm String
+  targetTerm   String?
+  language     String?
+  createdAt    DateTime  @default(now())
+
+  @@map("brand_glossary")
+}
+
+// ===================== BILLING & CREDITS =====================
+
+model Plan {
+  id                 String         @id @default(uuid())
+  name               String         // 'Free', 'Pro Creator', 'Business'
+  monthlyPriceCents  Int            @default(0)
+  annualPriceCents   Int            @default(0)
+  seatsIncluded      Int            @default(1)
+  creditsIncluded    Int            @default(100)
+  maxVideoMinutes    Int            @default(10)
+  resolutionCap      String         @default("1080p")
+  watermarkForced    Boolean        @default(false)
+  subscriptions      Subscription[]
+
+  @@map("plans")
+}
+
+model Subscription {
+  id                   String    @id @default(uuid())
+  workspaceId          String    @unique
+  workspace            Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  planId               String
+  plan                 Plan      @relation(fields: [planId], references: [id])
+  billingInterval      String    @default("monthly") // 'monthly' | 'annual'
+  status               String    @default("active")  // 'active' | 'past_due' | 'canceled'
+  seatsPurchased       Int       @default(1)
+  currentPeriodStart   DateTime  @default(now())
+  currentPeriodEnd     DateTime
+  stripeCustomerId     String?
+  stripeSubscriptionId String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@map("subscriptions")
+}
+
+model CreditLedger {
+  id                String    @id @default(uuid())
+  workspaceId       String
+  workspace         Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  delta             Int       // Positive = grant/topup/refund, Negative = consume
+  reason            String    // 'grant' | 'consume' | 'rollover' | 'topup' | 'refund'
+  relatedEntityType String?   // 'render' | 'translation' | 'voice_clone'
+  relatedEntityId   String?
+  balanceAfter      Int
+  createdAt         DateTime  @default(now())
+
+  @@map("credit_ledger")
+}
+
+// ===================== DEVELOPER PLATFORM =====================
+
+model ApiKey {
+  id          String    @id @default(uuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  keyHash     String    @unique
+  keyPrefix   String
+  label       String
+  lastUsedAt  DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@map("api_keys")
+}
+
+model WebhookEndpoint {
+  id               String            @id @default(uuid())
+  workspaceId      String
+  workspace        Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  url              String
+  secret           String
+  subscribedEvents String            @default("video.render.completed,video.render.failed")
+  createdAt        DateTime          @default(now())
+
+  deliveries       WebhookDelivery[]
+
+  @@map("webhook_endpoints")
+}
+
+// ===================== PHASE 3: TRANSLATION & BATCH =====================
+
+model TranslationJob {
+  id                 String    @id @default(uuid())
+  workspaceId        String
+  workspace          Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId             String
+  user               User      @relation("TranslationUser", fields: [userId], references: [id], onDelete: Cascade)
+  sourceVideoUrl     String
+  sourceLanguage     String    @default("auto")
+  targetLanguage     String
+  originalTranscript String?
+  translatedText     String?
+  targetVoiceId      String?
+  targetAudioUrl     String?
+  outputVideoUrl     String?
+  status             String    @default("queued") // 'queued' | 'transcribing' | 'translating' | 'synthesizing' | 'compositing' | 'completed' | 'failed'
+  progressPercentage Int       @default(0)
+  creditsConsumed    Int       @default(15)
+  errorMessage       String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@map("translation_jobs")
+}
+
+model BatchJob {
+  id                 String      @id @default(uuid())
+  workspaceId        String
+  workspace          Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId             String
+  user               User        @relation("BatchUser", fields: [userId], references: [id], onDelete: Cascade)
+  name               String
+  templateProjectId  String?
+  status             String      @default("queued") // 'queued' | 'processing' | 'completed' | 'failed'
+  totalCount         Int         @default(0)
+  completedCount     Int         @default(0)
+  failedCount        Int         @default(0)
+  creditsConsumed    Int         @default(0)
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  items              BatchItem[]
+
+  @@map("batch_jobs")
+}
+
+model BatchItem {
+  id                 String    @id @default(uuid())
+  batchJobId         String
+  batchJob           BatchJob  @relation(fields: [batchJobId], references: [id], onDelete: Cascade)
+  rowIndex           Int
+  variablesJson      String    // JSON stringified object of row variables: { name: "Alice", company: "Acme" }
+  status             String    @default("queued") // 'queued' | 'rendering' | 'completed' | 'failed'
+  renderId           String?
+  outputVideoUrl     String?
+  errorMessage       String?
+  createdAt          DateTime  @default(now())
+
+  @@map("batch_items")
+}
+
+model WebhookDelivery {
+  id               String          @id @default(uuid())
+  endpointId       String
+  endpoint         WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  event            String
+  payload          String
+  signature        String
+  statusCode       Int?
+  responseBody     String?
+  status           String          @default("pending") // 'pending' | 'success' | 'failed'
+  attempt          Int             @default(1)
+  deliveredAt      DateTime?
+  createdAt        DateTime        @default(now())
+
+  @@map("webhook_deliveries")
+}
+
+// ===================== FINAL PRODUCTION MODELS =====================
+
+model Template {
+  id              String   @id @default(uuid())
+  title           String
+  description     String
+  category        String   // 'marketing' | 'sales' | 'explainer' | 'social' | 'training'
+  aspectRatio     String   @default("16:9") // '16:9' | '9:16' | '1:1'
+  thumbnailUrl    String
+  previewVideoUrl String?
+  scenesJson      String   // JSON array of template scenes
+  isFeatured      Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  @@map("templates")
+}
+
+model ProjectComment {
+  id          String   @id @default(uuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sceneIndex  Int      @default(0)
+  timestampMs Int      @default(0)
+  content     String
+  resolved    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@map("project_comments")
+}
+
+model Notification {
+  id          String    @id @default(uuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  message     String
+  type        String    @default("info") // 'info' | 'success' | 'warning' | 'error'
+  read        Boolean   @default(false)
+  linkUrl     String?
+  createdAt   DateTime  @default(now())
+
+  @@map("notifications")
+}
+
+model AuditLog {
+  id          String    @id @default(uuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  actorUserId String
+  actorUser   User      @relation(fields: [actorUserId], references: [id], onDelete: Cascade)
+  action      String    // e.g. 'member.invited', 'member.role_changed', 'security.updated'
+  targetType  String    // 'workspace', 'user', 'project', 'render'
+  targetId    String?
+  metadata    String?   // JSON
+  createdAt   DateTime  @default(now())
+
+  @@map("audit_logs")
+}
+
+

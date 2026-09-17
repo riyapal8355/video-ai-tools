@@ -91,6 +91,47 @@ export default function BrandSystems({
   const [inputWord, setInputWord] = useState("");
   const [replacementWord, setReplacementWord] = useState("");
 
+  const fetchBrandData = async () => {
+    try {
+      const res = await fetch("/api/v2/brand");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.brandKit) {
+          setKits([
+            {
+              id: data.brandKit.id,
+              name: data.brandKit.name || "Default Brand Kit",
+              isFavorite: true,
+              logoText: data.brandKit.name?.slice(0, 6) || "VidoAI",
+              primaryColor: data.brandKit.primaryColor || "#0b101c",
+              accentColor: data.brandKit.accentColor || "#06b6d4",
+              secondaryColor: data.brandKit.secondaryColor || "#8b5cf6",
+              fontFamily: data.brandKit.fontFamily || "Inter, sans-serif",
+              updatedAt: "Just now",
+            },
+          ]);
+        }
+        if (data.glossary && Array.isArray(data.glossary)) {
+          setGlossaryEntries(
+            data.glossary.map((g: any) => ({
+              id: g.id,
+              type: "pronunciation",
+              originalTerm: g.term,
+              targetTerm: g.replacement,
+              language: g.language,
+            }))
+          );
+        }
+      }
+    } catch (e) {
+      console.error("Failed to load brand data:", e);
+    }
+  };
+
+  React.useEffect(() => {
+    fetchBrandData();
+  }, []);
+
   if (isGlossaryDetailOpen) {
     return <BrandGlossaryDetail onBack={() => setIsGlossaryDetailOpen(false)} />;
   }
@@ -98,7 +139,10 @@ export default function BrandSystems({
   if (isKitEditorOpen && activeSubSection === "brand_systems") {
     return (
       <BrandKitEditor
-        onBack={() => setIsKitEditorOpen(false)}
+        onBack={() => {
+          setIsKitEditorOpen(false);
+          fetchBrandData();
+        }}
         onOpenStudio={onOpenStudio}
       />
     );
@@ -111,35 +155,59 @@ export default function BrandSystems({
     );
   };
 
-  const handleCreateKit = () => {
+  const handleCreateKit = async () => {
     if (!newKitName.trim()) return;
-    const newKit: BrandKitItem = {
-      id: "kit_" + Date.now(),
-      name: newKitName,
-      isFavorite: false,
-      logoText: newKitName.slice(0, 6),
-      primaryColor: newPrimaryColor,
-      accentColor: newAccentColor,
-      secondaryColor: newSecondaryColor,
-      fontFamily: newFont,
-      updatedAt: "Just now",
-    };
-    setKits([...kits, newKit]);
+    try {
+      const res = await fetch("/api/v2/brand", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newKitName,
+          primaryColor: newPrimaryColor,
+          accentColor: newAccentColor,
+          secondaryColor: newSecondaryColor,
+          fontFamily: newFont,
+        }),
+      });
+      if (res.ok) {
+        fetchBrandData();
+      }
+    } catch (e) {
+      console.error("Failed to create brand kit:", e);
+    }
     setNewKitName("");
     setIsCreateModalOpen(false);
   };
 
-  const handleAddGlossaryRule = () => {
+  const handleAddGlossaryRule = async () => {
     if (!inputWord.trim()) return;
-    const newRule: GlossaryEntry = {
-      id: "rule_" + Date.now(),
-      type: glossaryTab,
-      originalTerm: inputWord,
-      targetTerm: replacementWord || undefined,
-    };
-    setGlossaryEntries([...glossaryEntries, newRule]);
+    try {
+      const res = await fetch("/api/v2/brand/glossary", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          term: inputWord,
+          replacement: replacementWord || inputWord,
+          language: "en",
+        }),
+      });
+      if (res.ok) {
+        fetchBrandData();
+      }
+    } catch (e) {
+      console.error("Failed to add glossary rule:", e);
+    }
     setInputWord("");
     setReplacementWord("");
+  };
+
+  const handleDeleteGlossaryRule = async (id: string) => {
+    try {
+      await fetch(`/api/v2/brand/glossary/${id}`, { method: "DELETE" });
+      fetchBrandData();
+    } catch (e) {
+      console.error("Failed to delete glossary rule:", e);
+    }
   };
 
   return (

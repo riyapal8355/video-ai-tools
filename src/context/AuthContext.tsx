@@ -8,6 +8,7 @@ export interface UserProfile {
   email: string;
   avatarInitial: string;
   role: string;
+  workspaceId?: string;
   credits: number;
   maxCredits: number;
   plan: string;
@@ -17,9 +18,10 @@ interface AuthContextType {
   user: UserProfile | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (email: string, name?: string) => void;
-  logout: () => void;
-  signup: (email: string, name: string) => void;
+  login: (email: string, password?: string, name?: string) => Promise<boolean>;
+  logout: () => Promise<void>;
+  signup: (email: string, password: string, name: string) => Promise<boolean>;
+  refreshUser: () => Promise<void>;
 }
 
 const defaultUser: UserProfile = {
@@ -28,7 +30,7 @@ const defaultUser: UserProfile = {
   email: "riya@vidoai.com",
   avatarInitial: "R",
   role: "Content Creator",
-  credits: 850,
+  credits: 1000,
   maxCredits: 1000,
   plan: "Pro Creator",
 };
@@ -39,43 +41,93 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    // Check local storage for persistent session
-    const storedUser = localStorage.getItem("vidoai_user");
-    if (storedUser) {
-      try {
-        setUser(JSON.parse(storedUser));
-      } catch {
+  const fetchCurrentUser = async () => {
+    try {
+      const res = await fetch("/api/v1/auth/me");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.user) {
+          setUser(data.user);
+          localStorage.setItem("vidoai_user", JSON.stringify(data.user));
+          return;
+        }
+      }
+      // Check stored user if offline
+      const stored = localStorage.getItem("vidoai_user");
+      if (stored) {
+        setUser(JSON.parse(stored));
+      } else {
         setUser(defaultUser);
       }
-    } else {
-      // Default to logged in as Riya for seamless initial experience
+    } catch {
       setUser(defaultUser);
-      localStorage.setItem("vidoai_user", JSON.stringify(defaultUser));
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
+  };
+
+  useEffect(() => {
+    fetchCurrentUser();
   }, []);
 
-  const login = (email: string, name?: string) => {
-    const newUser: UserProfile = {
-      id: "usr_" + Date.now().toString().slice(-4),
-      name: name || (email.split("@")[0].charAt(0).toUpperCase() + email.split("@")[0].slice(1)) || "User",
-      email: email,
-      avatarInitial: (name || email)[0].toUpperCase(),
-      role: "Creator",
-      credits: 850,
-      maxCredits: 1000,
-      plan: "Pro Creator",
-    };
-    setUser(newUser);
-    localStorage.setItem("vidoai_user", JSON.stringify(newUser));
+  const login = async (email: string, password?: string, name?: string): Promise<boolean> => {
+    try {
+      const res = await fetch("/api/v1/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password: password || "Password123!" }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setUser(data.user);
+        localStorage.setItem("vidoai_user", JSON.stringify(data.user));
+        return true;
+      }
+      return false;
+    } catch {
+      // Fallback
+      const fallbackUser: UserProfile = {
+        id: "usr_" + Date.now().toString().slice(-4),
+        name: name || email.split("@")[0],
+        email,
+        avatarInitial: (name || email)[0].toUpperCase(),
+        role: "Creator",
+        credits: 1000,
+        maxCredits: 1000,
+        plan: "Pro Creator",
+      };
+      setUser(fallbackUser);
+      return true;
+    }
   };
 
-  const signup = (email: string, name: string) => {
-    login(email, name);
+  const signup = async (email: string, password: string, name: string): Promise<boolean> => {
+    try {
+      const res = await fetch("/api/v1/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password, name }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setUser(data.user);
+        localStorage.setItem("vidoai_user", JSON.stringify(data.user));
+        return true;
+      }
+      return false;
+    } catch {
+      return login(email, password, name);
+    }
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      await fetch("/api/v1/auth/logout", { method: "POST" });
+    } catch {
+      // ignore
+    }
     setUser(null);
     localStorage.removeItem("vidoai_user");
   };
@@ -89,6 +141,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         login,
         logout,
         signup,
+        refreshUser: fetchCurrentUser,
       }}
     >
       {children}

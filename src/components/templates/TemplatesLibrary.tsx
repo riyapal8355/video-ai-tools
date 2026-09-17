@@ -226,10 +226,23 @@ export default function TemplatesLibrary({
         <TemplatePreviewModal
           template={selectedTemplate}
           onClose={() => setSelectedTemplate(null)}
-          onCreateFromTemplate={(tpl) => {
-            setSelectedTemplate(null);
-            if (onOpenStudio) onOpenStudio();
-            alert(`Loaded "${tpl.title}" with ${tpl.scenesCount} scenes into Studio timeline!`);
+          onCreateFromTemplate={async (tpl) => {
+            try {
+              const res = await fetch(`/api/v2/templates/${tpl.id}/use`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ title: tpl.title }),
+              });
+              const data = await res.json();
+              setSelectedTemplate(null);
+              if (onOpenStudio) {
+                onOpenStudio();
+              }
+            } catch (err) {
+              console.error("Failed to load template into Studio:", err);
+              setSelectedTemplate(null);
+              if (onOpenStudio) onOpenStudio();
+            }
           }}
         />
       )}

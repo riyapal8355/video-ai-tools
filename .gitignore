@@ -39,3 +39,23 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local sqlite database & journals
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# generated render video files (keep directory, ignore outputs)
+/public/renders/*.mp4
+!/public/renders/.gitkeep
+
+# markdown & agent documentation files
+*.md
+/docs/
+
+# generated audio files (keep fallback and gitkeep)
+/public/audio/*.mp3
+!/public/audio/sample_fallback.mp3
+!/public/audio/.gitkeep
+

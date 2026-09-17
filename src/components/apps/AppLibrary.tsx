@@ -26,6 +26,8 @@ import {
 } from "lucide-react";
 import AskRhysWidget from "../dashboard/AskRhysWidget";
 import FeaturedAppModals from "./FeaturedAppModals";
+import VideoTranslationModal from "./VideoTranslationModal";
+import BatchPersonalizationModal from "./BatchPersonalizationModal";
 
 interface AppItem {
   id: string;
@@ -193,6 +195,18 @@ export default function AppLibrary({ onOpenStudio }: AppLibraryProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedApp, setSelectedApp] = useState<AppItem | null>(null);
   const [activeFeaturedModal, setActiveFeaturedModal] = useState<"generator" | "podcast" | "speech" | null>(null);
+  const [isTranslationOpen, setIsTranslationOpen] = useState(false);
+  const [isBatchOpen, setIsBatchOpen] = useState(false);
+
+  const handleAppClick = (app: AppItem) => {
+    if (app.id === "app_translate") {
+      setIsTranslationOpen(true);
+    } else if (app.id === "app_batch") {
+      setIsBatchOpen(true);
+    } else {
+      setSelectedApp(app);
+    }
+  };
 
   const filteredApps = allAppsList.filter((app) => {
     const matchesCategory = activeTab === "all" || app.category === activeTab;
@@ -380,7 +394,7 @@ export default function AppLibrary({ onOpenStudio }: AppLibraryProps) {
           {filteredApps.map((app) => (
             <div
               key={app.id}
-              onClick={() => setSelectedApp(app)}
+              onClick={() => handleAppClick(app)}
               className="bg-[#0c111e] hover:bg-[#131b2e] border border-[#1c2740] hover:border-cyan-500/60 rounded-full p-2.5 px-4 flex items-center gap-3.5 transition-all duration-200 cursor-pointer group shadow-sm hover:shadow-lg hover:shadow-cyan-500/10"
             >
               <div className="w-10 h-10 rounded-full bg-[#151e33] border border-[#223152] flex items-center justify-center shrink-0 group-hover:scale-105 group-hover:border-cyan-500/50 transition-all shadow-sm">
@@ -404,6 +418,20 @@ export default function AppLibrary({ onOpenStudio }: AppLibraryProps) {
       <FeaturedAppModals
         activeModal={activeFeaturedModal}
         onClose={() => setActiveFeaturedModal(null)}
+        onOpenStudio={onOpenStudio}
+      />
+
+      {/* VIDEO TRANSLATION MODAL */}
+      <VideoTranslationModal
+        isOpen={isTranslationOpen}
+        onClose={() => setIsTranslationOpen(false)}
+        onOpenStudio={onOpenStudio}
+      />
+
+      {/* BATCH PERSONALIZATION MODAL */}
+      <BatchPersonalizationModal
+        isOpen={isBatchOpen}
+        onClose={() => setIsBatchOpen(false)}
         onOpenStudio={onOpenStudio}
       />
 

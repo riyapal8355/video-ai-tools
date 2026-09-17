@@ -96,9 +96,52 @@ export default function BrandKitEditor({
     setFonts(fonts.map((f) => (f.id === id ? { ...f, family: newFamily } : f)));
   };
 
-  const handleSave = () => {
-    alert(`Brand System "${brandTitle}" saved successfully!`);
-    if (onBack) onBack();
+  const [isSaving, setIsSaving] = useState(false);
+
+  React.useEffect(() => {
+    async function loadBrand() {
+      try {
+        const res = await fetch("/api/v2/brand");
+        if (res.ok) {
+          const data = await res.json();
+          if (data.brandKit) {
+            setBrandTitle(data.brandKit.name || "Default Brand Kit");
+            setColors([
+              { id: "c1", name: "Background", hex: data.brandKit.primaryColor || "#0b101c" },
+              { id: "c2", name: "Main Text", hex: "#ffffff" },
+              { id: "c3", name: "Accent 1", hex: data.brandKit.accentColor || "#00c4ff" },
+              { id: "c4", name: "Secondary", hex: data.brandKit.secondaryColor || "#7928ca" },
+            ]);
+          }
+        }
+      } catch (e) {
+        console.error("Failed to load brand in editor:", e);
+      }
+    }
+    loadBrand();
+  }, []);
+
+  const handleSave = async () => {
+    try {
+      setIsSaving(true);
+      await fetch("/api/v2/brand", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: brandTitle,
+          primaryColor: colors[0]?.hex || "#0b101c",
+          accentColor: colors[2]?.hex || "#00c4ff",
+          secondaryColor: colors[3]?.hex || "#7928ca",
+          fontFamily: fonts[2]?.family || "Inter",
+        }),
+      });
+      alert(`Brand System "${brandTitle}" saved to cloud successfully!`);
+      if (onBack) onBack();
+    } catch (e) {
+      alert("Failed to save brand kit");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (

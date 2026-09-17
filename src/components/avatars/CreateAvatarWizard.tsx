@@ -36,7 +36,72 @@ export default function CreateAvatarWizard({
   const [copied, setCopied] = useState(false);
   const [countdown, setCountdown] = useState(15);
   const [qrTimer, setQrTimer] = useState(1183); // 19:43 in seconds
+  const [avatarName, setAvatarName] = useState("My Digital Avatar");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [uploadedVideoUrl, setUploadedVideoUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleCreateAvatar = async (videoUrl?: string) => {
+    if (!avatarName.trim()) {
+      alert("Please enter a name for your avatar.");
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      const res = await fetch("/api/v2/avatars/custom", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: avatarName,
+          type: "instant",
+          footageUrl: videoUrl || uploadedVideoUrl || "/renders/sample.mp4",
+          consentStatement: "I hereby declare that I authorize the creation of my digital AI twin for video generation.",
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to create avatar");
+      }
+
+      if (onSuccess) onSuccess();
+      alert(`Avatar "${avatarName}" created and added to your library!`);
+      onBack();
+    } catch (err: any) {
+      console.error("Avatar creation error:", err);
+      alert("Error creating avatar: " + err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setIsSubmitting(true);
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("type", "video");
+
+      const res = await fetch("/api/v2/assets/local-upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) throw new Error("Upload failed");
+      const data = await res.json();
+      setUploadedVideoUrl(data.asset.url);
+      setCamStatus("completed");
+      setTab("webcam");
+    } catch (err: any) {
+      alert("File upload failed: " + err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   // QR Timer Countdown
   useEffect(() => {
@@ -253,28 +318,46 @@ export default function CreateAvatarWizard({
               <div className="w-full flex flex-col items-center py-4">
                 <CheckCircle2 size={48} className="text-emerald-400 mb-2" />
                 <h3 className="text-base font-bold text-slate-900 dark:text-white mb-1">
-                  15-Second Motion & Voice Captured!
+                  Motion & Likeness Captured with Consent
                 </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mb-5 max-w-sm">
-                  Your footage passed the resolution and lip-sync quality tests.
+                <p className="text-xs text-slate-500 dark:text-slate-400 mb-4 max-w-sm text-center">
+                  Your footage passed the resolution and lip-sync tests. A legal consent record will be securely archived.
                 </p>
+
+                <div className="w-full max-w-sm mb-4">
+                  <label className="text-[11px] text-slate-400 block mb-1 font-semibold text-center">
+                    Avatar Name
+                  </label>
+                  <input
+                    type="text"
+                    value={avatarName}
+                    onChange={(e) => setAvatarName(e.target.value)}
+                    placeholder="e.g. My Studio Persona"
+                    className="w-full bg-slate-100 dark:bg-[#121828] border border-slate-300 dark:border-[#22304f] rounded-xl px-3.5 py-2 text-xs text-center focus:outline-none focus:border-cyan-500 font-semibold"
+                  />
+                </div>
 
                 <div className="flex gap-3">
                   <button
                     onClick={() => setCamStatus("ready")}
+                    disabled={isSubmitting}
                     className="px-5 py-2 rounded-full border border-slate-300 dark:border-[#243354] text-xs font-semibold"
                   >
                     Re-record
                   </button>
                   <button
-                    onClick={() => {
-                      if (onSuccess) onSuccess();
-                      alert("Digital Avatar created successfully! Training complete.");
-                      onBack();
-                    }}
-                    className="px-7 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 text-white text-xs font-bold rounded-full shadow-lg shadow-emerald-500/20 cursor-pointer"
+                    onClick={() => handleCreateAvatar()}
+                    disabled={isSubmitting}
+                    className="px-7 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white text-xs font-bold rounded-full shadow-lg shadow-emerald-500/20 cursor-pointer flex items-center gap-2"
                   >
-                    Generate Digital Avatar
+                    {isSubmitting ? (
+                      <>
+                        <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                        <span>Archiving & Training Avatar...</span>
+                      </>
+                    ) : (
+                      <span>Generate Digital Avatar</span>
+                    )}
                   </button>
                 </div>
               </div>
@@ -369,7 +452,13 @@ export default function CreateAvatarWizard({
         {/* Tab: Upload Footage */}
         {tab === "upload" && (
           <div className="w-full max-w-xl p-10 border-2 border-dashed border-slate-300 dark:border-[#243354] hover:border-cyan-400 rounded-3xl flex flex-col items-center justify-center text-center bg-slate-50 dark:bg-[#0c111e] cursor-pointer">
-            <input type="file" ref={fileInputRef} className="hidden" accept="video/*" />
+            <input
+              type="file"
+              ref={fileInputRef}
+              className="hidden"
+              accept="video/*"
+              onChange={handleFileUpload}
+            />
             <Video size={36} className="text-cyan-500 mb-3" />
             <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-1">
               Upload footage of your persona (MP4, MOV)
@@ -379,9 +468,17 @@ export default function CreateAvatarWizard({
             </p>
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="px-6 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold rounded-full shadow-md cursor-pointer"
+              disabled={isSubmitting}
+              className="px-6 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold rounded-full shadow-md cursor-pointer flex items-center gap-2"
             >
-              Select Video File
+              {isSubmitting ? (
+                <>
+                  <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                  <span>Uploading footage...</span>
+                </>
+              ) : (
+                <span>Select Video File</span>
+              )}
             </button>
           </div>
         )}

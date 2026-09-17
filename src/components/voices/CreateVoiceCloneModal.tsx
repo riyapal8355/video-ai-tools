@@ -31,9 +31,69 @@ export default function CreateVoiceCloneModal({
   const [micState, setMicState] = useState<"blocked" | "recording" | "recorded">("blocked");
   const [recordSeconds, setRecordSeconds] = useState(0);
   const [voiceName, setVoiceName] = useState("");
+  const [isCloning, setIsCloning] = useState(false);
+  const [uploadedAudioUrl, setUploadedAudioUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
+
+  const handleSaveVoiceClone = async () => {
+    const finalName = voiceName.trim() || "My Cloned Voice";
+    try {
+      setIsCloning(true);
+      const res = await fetch("/api/v2/voices/clone", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: finalName,
+          language,
+          audioSampleUrl: uploadedAudioUrl || "https://actions.google.com/sounds/v1/speech/greeting_male.ogg",
+          consentStatement: "I authorize VidoAI to clone and synthesize my voice for AI video generation.",
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to clone voice");
+      }
+
+      if (onSuccess) onSuccess(finalName);
+      alert(`Voice "${finalName}" successfully cloned and archived with consent!`);
+      onClose();
+    } catch (err: any) {
+      console.error("Voice cloning error:", err);
+      alert("Error cloning voice: " + err.message);
+    } finally {
+      setIsCloning(false);
+    }
+  };
+
+  const handleAudioUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setIsCloning(true);
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("type", "audio");
+
+      const res = await fetch("/api/v2/assets/local-upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) throw new Error("Upload failed");
+      const data = await res.json();
+      setUploadedAudioUrl(data.asset.url);
+      setMicState("recorded");
+      setTab("record");
+    } catch (err: any) {
+      alert("Audio upload failed: " + err.message);
+    } finally {
+      setIsCloning(false);
+    }
+  };
 
   const handleStartRecording = () => {
     setMicState("recording");
@@ -251,19 +311,24 @@ export default function CreateVoiceCloneModal({
                 <div className="flex gap-2.5">
                   <button
                     onClick={() => handleStartRecording()}
+                    disabled={isCloning}
                     className="px-4 py-2 bg-slate-200 dark:bg-[#18233a] rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1.5"
                   >
                     <RotateCcw size={13} /> Re-record
                   </button>
                   <button
-                    onClick={() => {
-                      if (onSuccess) onSuccess(voiceName || "My Custom Voice");
-                      alert(`Voice "${voiceName || "My Custom Voice"}" created successfully!`);
-                      onClose();
-                    }}
-                    className="px-6 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-xs font-bold rounded-xl shadow-lg shadow-blue-600/30"
+                    onClick={handleSaveVoiceClone}
+                    disabled={isCloning}
+                    className="px-6 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-blue-600/30 flex items-center gap-2 cursor-pointer"
                   >
-                    Save & Clone Voice
+                    {isCloning ? (
+                      <>
+                        <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                        <span>Archiving & Cloning Voice...</span>
+                      </>
+                    ) : (
+                      <span>Save & Clone Voice</span>
+                    )}
                   </button>
                 </div>
               </div>
@@ -274,7 +339,13 @@ export default function CreateVoiceCloneModal({
         {/* Tab 2: Upload audio */}
         {tab === "upload" && (
           <div className="p-8 border-2 border-dashed border-slate-200 dark:border-[#243354] hover:border-blue-500 rounded-2xl flex flex-col items-center justify-center text-center bg-slate-50/50 dark:bg-[#0a0e1a] cursor-pointer">
-            <input type="file" ref={fileInputRef} className="hidden" accept="audio/*" />
+            <input
+              type="file"
+              ref={fileInputRef}
+              className="hidden"
+              accept="audio/*"
+              onChange={handleAudioUpload}
+            />
             <Upload size={32} className="text-blue-500 mb-3" />
             <p className="text-sm font-bold text-slate-800 dark:text-slate-100">
               Drag and drop your audio file here, or click to browse
@@ -284,9 +355,17 @@ export default function CreateVoiceCloneModal({
             </p>
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl shadow-md cursor-pointer"
+              disabled={isCloning}
+              className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl shadow-md cursor-pointer flex items-center gap-2"
             >
-              Browse Files
+              {isCloning ? (
+                <>
+                  <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                  <span>Uploading Audio...</span>
+                </>
+              ) : (
+                <span>Browse Files</span>
+              )}
             </button>
           </div>
         )}

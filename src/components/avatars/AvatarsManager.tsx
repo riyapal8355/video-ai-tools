@@ -28,6 +28,7 @@ interface PublicAvatar {
   attire: string;
   tag: string;
   avatarEmoji: string;
+  imageSrc?: string;
   gender: "Female" | "Male";
   bgGradient: string;
 }
@@ -40,6 +41,7 @@ const publicAvatarsList: PublicAvatar[] = [
     attire: "Business Professional",
     tag: "Studio",
     avatarEmoji: "👩🏼‍💼",
+    imageSrc: "/avatars/emma.jpg",
     gender: "Female",
     bgGradient: "from-blue-900/40 via-indigo-950 to-[#0c101c]",
   },
@@ -50,6 +52,7 @@ const publicAvatarsList: PublicAvatar[] = [
     attire: "Modern Casual",
     tag: "Instant",
     avatarEmoji: "👩🏽‍💼",
+    imageSrc: "/avatars/riya.jpg",
     gender: "Female",
     bgGradient: "from-purple-900/40 via-slate-900 to-[#0c101c]",
   },
@@ -60,6 +63,7 @@ const publicAvatarsList: PublicAvatar[] = [
     attire: "Casual Hoodie",
     tag: "Studio",
     avatarEmoji: "👨🏻‍💻",
+    imageSrc: "/avatars/alex.jpg",
     gender: "Male",
     bgGradient: "from-cyan-900/40 via-blue-950 to-[#0c101c]",
   },
@@ -70,6 +74,7 @@ const publicAvatarsList: PublicAvatar[] = [
     attire: "Medical Coat",
     tag: "Studio",
     avatarEmoji: "👩🏻‍⚕️",
+    imageSrc: "/avatars/sarah.jpg",
     gender: "Female",
     bgGradient: "from-teal-900/40 via-slate-900 to-[#0c101c]",
   },
@@ -80,6 +85,7 @@ const publicAvatarsList: PublicAvatar[] = [
     attire: "Formal Tuxedo",
     tag: "Photo",
     avatarEmoji: "👨🏾‍💼",
+    imageSrc: "/avatars/marcus.jpg",
     gender: "Male",
     bgGradient: "from-amber-900/40 via-slate-900 to-[#0c101c]",
   },
@@ -90,6 +96,7 @@ const publicAvatarsList: PublicAvatar[] = [
     attire: "Streetwear",
     tag: "Instant",
     avatarEmoji: "👩🏼",
+    imageSrc: "/avatars/riya.jpg",
     gender: "Female",
     bgGradient: "from-fuchsia-900/40 via-purple-950 to-[#0c101c]",
   },
@@ -106,7 +113,29 @@ export default function AvatarsManager({
   const [isVirtualModalOpen, setIsVirtualModalOpen] = useState(false);
   const [characterPrompt, setCharacterPrompt] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
+  const [customAvatars, setCustomAvatars] = useState<any[]>([]);
+  const [isLoadingAvatars, setIsLoadingAvatars] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const fetchAvatars = async () => {
+    try {
+      setIsLoadingAvatars(true);
+      const res = await fetch("/api/v2/avatars");
+      if (res.ok) {
+        const data = await res.json();
+        const all: any[] = data.avatars || [];
+        setCustomAvatars(all.filter((a) => a.category === "Custom" || a.type === "instant" || a.type === "photo"));
+      }
+    } catch (e) {
+      console.error("Failed to load custom avatars:", e);
+    } finally {
+      setIsLoadingAvatars(false);
+    }
+  };
+
+  React.useEffect(() => {
+    fetchAvatars();
+  }, []);
 
   if (isWizardOpen) {
     return (
@@ -114,6 +143,7 @@ export default function AvatarsManager({
         onBack={() => setIsWizardOpen(false)}
         onSuccess={() => {
           setIsWizardOpen(false);
+          fetchAvatars();
         }}
       />
     );
@@ -195,7 +225,66 @@ export default function AvatarsManager({
       </div>
 
       {/* 2. MAIN CONTENT VIEW */}
-      {activeTab === "my_avatars" || isNewAvatarMode ? (
+      {activeTab === "my_avatars" && customAvatars.length > 0 && !isNewAvatarMode ? (
+        <div className="max-w-6xl w-full mx-auto px-8 py-8 flex-1">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-xl font-bold text-slate-900 dark:text-white">
+                My Custom Avatars ({customAvatars.length})
+              </h2>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Trained AI personas authorized with verified consent records.
+              </p>
+            </div>
+            <button
+              onClick={() => setIsWizardOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white text-xs font-bold shadow-md cursor-pointer"
+            >
+              <UserPlus size={14} />
+              <span>Create New Avatar</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+            {customAvatars.map((av) => (
+              <div
+                key={av.id}
+                className="bg-white dark:bg-[#0c111e] border border-slate-200 dark:border-[#1d273f] hover:border-cyan-400 rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all flex flex-col group"
+              >
+                <div className="aspect-[3/4] bg-gradient-to-tr from-blue-900/30 to-purple-900/30 relative flex items-center justify-center overflow-hidden">
+                  {av.thumbnailUrl ? (
+                    <img src={av.thumbnailUrl} alt={av.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                  ) : (
+                    <span className="text-6xl">👩‍💼</span>
+                  )}
+                  <span className="absolute top-2 left-2 text-[9px] font-bold bg-emerald-500/90 text-white px-2 py-0.5 rounded-md backdrop-blur-sm flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 bg-white rounded-full"></span> Ready
+                  </span>
+                  <span className="absolute top-2 right-2 text-[9px] font-bold bg-black/60 text-cyan-300 px-1.5 py-0.5 rounded backdrop-blur-sm">
+                    Consent ✓
+                  </span>
+                </div>
+                <div className="p-3">
+                  <h4 className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                    {av.name}
+                  </h4>
+                  <p className="text-[10px] text-slate-400 truncate mt-0.5">
+                    {av.attire || "Custom Persona"} • {av.gender}
+                  </p>
+                  <button
+                    onClick={() => {
+                      if (onOpenStudio) onOpenStudio();
+                    }}
+                    className="w-full mt-2.5 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white text-[11px] font-bold rounded-lg transition-colors cursor-pointer"
+                  >
+                    Open in Studio
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : activeTab === "my_avatars" || isNewAvatarMode ? (
         <div className="max-w-5xl w-full mx-auto px-6 py-10 flex flex-col items-center justify-center flex-1">
           {/* Main Hero Header (Matches Screenshot) */}
           <div className="text-center mb-9">
@@ -380,9 +469,13 @@ export default function AvatarsManager({
                   className="bg-white dark:bg-[#0d1222] border border-slate-200 dark:border-[#1d273f] hover:border-cyan-400 dark:hover:border-cyan-500 rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all flex flex-col group cursor-pointer"
                 >
                   <div
-                    className={`aspect-[3/4] bg-gradient-to-b ${avatar.bgGradient} relative flex items-center justify-center group-hover:scale-105 transition-transform duration-300`}
+                    className={`aspect-[3/4] bg-gradient-to-b ${avatar.bgGradient} relative flex items-center justify-center overflow-hidden group-hover:scale-105 transition-transform duration-300`}
                   >
-                    <span className="text-6xl drop-shadow-xl">{avatar.avatarEmoji}</span>
+                    {avatar.imageSrc ? (
+                      <img src={avatar.imageSrc} alt={avatar.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-6xl drop-shadow-xl">{avatar.avatarEmoji}</span>
+                    )}
                     <span className="absolute top-2 left-2 text-[9px] font-bold bg-black/60 text-white px-2 py-0.5 rounded-md backdrop-blur-sm">
                       {avatar.tag}
                     </span>

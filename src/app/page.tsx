@@ -21,14 +21,16 @@ import AllAppOutputs from "@/components/apps/AllAppOutputs";
 import ProjectsManager from "@/components/projects/ProjectsManager";
 import TemplatesLibrary from "@/components/templates/TemplatesLibrary";
 import VidoAIStudio from "@/components/studio/VidoAIStudio";
+import DeveloperPortal from "@/components/developer/DeveloperPortal";
 import AuthPage from "@/components/auth/AuthPage";
+import VideoAgentModal from "@/components/studio/VideoAgentModal";
 import { useAuth } from "@/context/AuthContext";
 import { Video } from "lucide-react";
 
 function DashboardContent() {
   const { user, isAuthenticated, isLoading } = useAuth();
   const [currentView, setCurrentView] = useState<
-    "dashboard" | "avatars" | "design_look" | "voices" | "brand" | "apps" | "projects" | "templates" | "studio"
+    "dashboard" | "avatars" | "design_look" | "voices" | "brand" | "apps" | "projects" | "templates" | "studio" | "developer"
   >("projects"); // starts on Projects matching screenshot
   const [activeRailTab, setActiveRailTab] = useState("projects");
   const [activeSidebarSection, setActiveSidebarSection] = useState("home");
@@ -37,6 +39,8 @@ function DashboardContent() {
   const [activeAppsSection, setActiveAppsSection] = useState<"home" | "integrations" | "outputs">("home");
   const [activeProjectsSection, setActiveProjectsSection] = useState<"my_projects" | "trash">("my_projects");
   const [activeTemplateCategory, setActiveTemplateCategory] = useState("all");
+  const [activeProjectId, setActiveProjectId] = useState<string | undefined>(undefined);
+  const [isVideoAgentOpen, setIsVideoAgentOpen] = useState(false);
 
   if (isLoading) {
     return (
@@ -70,6 +74,8 @@ function DashboardContent() {
     } else if (tabId === "home") {
       setCurrentView("dashboard");
       setActiveSidebarSection("home");
+    } else if (tabId === "developer") {
+      setCurrentView("developer");
     }
   };
 
@@ -84,13 +90,16 @@ function DashboardContent() {
     }
   };
 
-  const handleOpenStudio = () => {
+  const handleOpenStudio = (projectId?: string) => {
+    if (projectId) setActiveProjectId(projectId);
     setCurrentView("studio");
   };
 
   const handleSidebarSelect = (section: string) => {
     setActiveSidebarSection(section);
-    if (section === "scene_by_scene" || section === "single_scene" || section === "video_agent") {
+    if (section === "video_agent") {
+      setIsVideoAgentOpen(true);
+    } else if (section === "scene_by_scene" || section === "single_scene") {
       setCurrentView("studio");
     } else {
       setCurrentView("dashboard");
@@ -98,7 +107,12 @@ function DashboardContent() {
   };
 
   if (currentView === "studio") {
-    return <VidoAIStudio onBackToDashboard={() => setCurrentView("dashboard")} />;
+    return (
+      <VidoAIStudio
+        onBackToDashboard={() => setCurrentView("dashboard")}
+        projectId={activeProjectId}
+      />
+    );
   }
 
   const isAvatarContext =
@@ -117,7 +131,7 @@ function DashboardContent() {
       />
 
       {/* 2. Secondary Sidebar - Context Aware */}
-      {isAvatarContext ? (
+      {currentView === "developer" ? null : isAvatarContext ? (
         <ManageAvatarsSidebar
           activeSection={activeAvatarSection}
           onSelectSection={handleAvatarSidebarSelect}
@@ -151,7 +165,9 @@ function DashboardContent() {
       )}
 
       {/* 3. Main Workspace Area */}
-      {currentView === "avatars" ? (
+      {currentView === "developer" ? (
+        <DeveloperPortal />
+      ) : currentView === "avatars" ? (
         <AvatarsManager onOpenStudio={handleOpenStudio} />
       ) : currentView === "design_look" ? (
         <DesignLookStudio onOpenStudio={handleOpenStudio} />
@@ -189,7 +205,7 @@ function DashboardContent() {
           <header className="w-full px-8 py-4 flex items-center justify-between z-20">
             <div className="flex items-center gap-3">
               <button
-                onClick={handleOpenStudio}
+                onClick={() => handleOpenStudio()}
                 className="bg-[#121828] hover:bg-[#1a233a] border border-[#222f4d] hover:border-[#384c7a] px-3.5 py-1.5 rounded-full text-xs font-semibold text-blue-400 flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
               >
                 <Video size={14} /> Open VidoAI Studio Editor
@@ -224,6 +240,18 @@ function DashboardContent() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* AI Video Agent Modal */}
+      {isVideoAgentOpen && (
+        <VideoAgentModal
+          isOpen={isVideoAgentOpen}
+          onClose={() => setIsVideoAgentOpen(false)}
+          onProjectCreated={(newProjId) => {
+            setIsVideoAgentOpen(false);
+            handleOpenStudio(newProjId);
+          }}
+        />
       )}
     </main>
   );
